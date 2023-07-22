@@ -1,6 +1,8 @@
 #include "llvm/Transforms/Instrumentation/VIP.h"
 
 #include "llvm/InitializePasses.h"
+#include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Function.h"
@@ -12,6 +14,18 @@
 using namespace llvm;
 
 namespace {
+
+class VIPGuard {
+ public:
+  bool sanitizeModule(Module&);
+  bool sanitizeFunction(Function&);
+ private:
+  void prepareVIPLibraryCallee(Module&);
+  bool instrumentFunctionPtrStore(StoreInst*);
+  bool instrumentIndirectCallSite(CallInst*);
+  FunctionCallee vipWrite64Callee;
+  FunctionCallee vipAssertCallee;
+};
 
 class VIPLegacyPass : public ModulePass {
  public:
@@ -32,24 +46,62 @@ ModulePass* llvm::createVIPLegacyPassPass() {
 }
 
 bool VIPLegacyPass::runOnModule(Module &M) {
-  for (auto &F: M) {
-    errs() << F.getName() << "\n";
+  VIPGuard vipGuard;
+  return vipGuard.sanitizeModule(M);
+}
+
+PreservedAnalyses VIPPass::run(Module &M, ModuleAnalysisManager &AM) {
+  VIPGuard vipGuard;
+  if (vipGuard.sanitizeModule(M))
+    return PreservedAnalyses::none();
+  return PreservedAnalyses::all();
+}
+bool VIPGuard::sanitizeModule(Module &M) {
+  bool Res = false;
+  prepareVIPLibraryCallee(M);
+  for (Function &F: M) {
+    Res |= sanitizeFunction(F);
   }
-  return false;
+  return Res;
+}
+
+void VIPGuard::prepareVIPLibraryCallee(Module &M) {
+  LLVMContext &Ctx = M.getContext();
+  FunctionType* FuncTy = FunctionType::get(Type::getVoidTy(Ctx),
+                                           {Type::getInt8PtrTy(Ctx)},
+                                           false);
+  vipWrite64Callee = M.getOrInsertFunction("vip_write64", FuncTy);
+  vipAssertCallee = M.getOrInsertFunction("vip_assert", FuncTy);
 }
 
 
-PreservedAnalyses VIPPass::run(Module &M, ModuleAnalysisManager &AM) {
-  LLVMContext& Ctx = M.getContext();
-  FunctionCallee PutsFn = M.getOrInsertFunction("puts", 
-                                                Type::getInt32Ty(Ctx), 
-                                                Type::getInt8PtrTy(Ctx));
-  for (Function &F: M) {
-    // errs() << F.getName() << "\n";
-    IRBuilder<> IRB(F.getEntryBlock().getFirstNonPHI());
-    Constant* HelloStr = IRB.CreateGlobalStringPtr("llvm pass say hello");
-    LoadInst* LdHello = IRB.CreateLoad(IRB.getInt8PtrTy(), HelloStr);
-    IRB.CreateCall(PutsFn, {LdHello});
+bool VIPGuard::sanitizeFunction(Function &F) {
+  bool Res = false;
+  for (Instruction &I: instructions(F)) {
+    if (StoreInst *SI = dyn_cast<StoreInst>(&I)) {
+      Res |= instrumentFunctionPtrStore(SI);
+    } else if (CallInst *CI = dyn_cast<CallInst>(&I)) {
+      Res |= instrumentIndirectCallSite(CI);
+    }
   }
-  return PreservedAnalyses::none();
+  return Res;
+}
+
+bool VIPGuard::instrumentFunctionPtrStore(StoreInst* SI) {
+  Type* ValTy = SI->getValueOperand()->getType();
+  PointerType* ValPtrTy = dyn_cast<PointerType>(ValTy);
+  if (!ValPtrTy || !ValPtrTy->getElementType()->isFunctionTy()) {
+    return false;
+  }
+  errs() << *SI << " will be instrumented\n"; 
+  IRBuilder<> IRB(SI->getNextNode());
+  IRB.CreateCall(vipWrite64Callee, {SI->getPointerOperand()});
+  return true;
+}
+
+bool VIPGuard::instrumentIndirectCallSite(CallInst* CI) {
+  if (!CI->isIndirectCall()) {
+    return false;
+  }
+  return false;
 }
