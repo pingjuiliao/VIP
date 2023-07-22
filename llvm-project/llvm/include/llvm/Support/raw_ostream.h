@@ -521,7 +521,7 @@ class raw_string_ostream : public raw_ostream {
 
   /// Return the current position within the stream, not counting the bytes
   /// currently in the buffer.
-  uint64_t current_pos() const override { return OS.size(); }
+  uint64_t current_pos() const override;
 
 public:
   explicit raw_string_ostream(std::string &O) : OS(O) {}

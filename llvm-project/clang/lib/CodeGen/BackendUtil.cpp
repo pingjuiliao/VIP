@@ -63,6 +63,7 @@
 #include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
 #include "llvm/Transforms/Instrumentation/SanitizerCoverage.h"
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
+#include "llvm/Transforms/Instrumentation/VIP.h"
 #include "llvm/Transforms/ObjCARC.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
@@ -330,6 +331,10 @@ static void addKernelMemorySanitizerPass(const PassManagerBuilder &Builder,
 static void addThreadSanitizerPass(const PassManagerBuilder &Builder,
                                    legacy::PassManagerBase &PM) {
   PM.add(createThreadSanitizerLegacyPassPass());
+}
+static void addVIPPass(const PassManagerBuilder &Builder,
+                       legacy::PassManagerBase &PM) {
+  PM.add(createVIPLegacyPassPass());
 }
 
 static void addDataFlowSanitizerPass(const PassManagerBuilder &Builder,
@@ -678,6 +683,13 @@ void EmitAssemblyHelper::CreatePasses(legacy::PassManager &MPM,
                            addDataFlowSanitizerPass);
     PMBuilder.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0,
                            addDataFlowSanitizerPass);
+  }
+
+  if (LangOpts.Sanitize.has(SanitizerKind::VIP)) {
+    PMBuilder.addExtension(PassManagerBuilder::EP_OptimizerLast,
+                           addVIPPass);
+    PMBuilder.addExtension(PassManagerBuilder::EP_EnabledOnOptLevel0,
+                           addVIPPass);
   }
 
   // Set up the per-function pass manager.
@@ -1244,6 +1256,9 @@ void EmitAssemblyHelper::EmitAssemblyWithNewPassManager(
     if (LangOpts.Sanitize.has(SanitizerKind::KernelHWAddress)) {
       MPM.addPass(HWAddressSanitizerPass(
           /*CompileKernel=*/true, /*Recover=*/true));
+    }
+    if (LangOpts.Sanitize.has(SanitizerKind::VIP)) {
+      MPM.addPass(VIPPass());
     }
 
     if (CodeGenOpts.OptimizationLevel == 0) {

@@ -111,6 +111,9 @@ SANITIZER("unsigned-integer-overflow", UnsignedIntegerOverflow)
 // DataFlowSanitizer
 SANITIZER("dataflow", DataFlow)
 
+// Value Invariant Property
+SANITIZER("vip", VIP)
+
 // Control Flow Integrity
 SANITIZER("cfi-cast-strict", CFICastStrict)
 SANITIZER("cfi-derived-cast", CFIDerivedCast)

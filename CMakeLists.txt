@@ -12,7 +12,7 @@ add_custom_target(llvm-rebuild
   COMMAND mkdir ${LLVM_DIR}/build
   COMMAND cd ${LLVM_DIR}/build && cmake
           -DCMAKE_BUILD_TYPE=Release
-          -DLLVM_ENABLE_PROJECTS="clang;compiler-rt"
+          -DLLVM_ENABLE_PROJECTS=\"clang\;compiler-rt\"
           -DBUILD_SHARED_LIBS=On
           -DLLVM_BUILD_TOOLS=Off
           -DLLVM_ENABLE_LTO=Off

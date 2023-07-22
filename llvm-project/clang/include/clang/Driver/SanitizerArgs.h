@@ -75,6 +75,7 @@ class SanitizerArgs {
   bool needsUbsanRt() const;
   bool requiresMinimalRuntime() const { return MinimalRuntime; }
   bool needsDfsanRt() const { return Sanitizers.has(SanitizerKind::DataFlow); }
+  bool needsVipRt() const { return Sanitizers.has(SanitizerKind::VIP); }
   bool needsSafeStackRt() const { return SafeStackRuntime; }
   bool needsCfiRt() const;
   bool needsCfiDiagRt() const;

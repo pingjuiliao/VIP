@@ -903,6 +903,8 @@ void raw_string_ostream::write_impl(const char *Ptr, size_t Size) {
   OS.append(Ptr, Size);
 }
 
+uint64_t raw_string_ostream::current_pos() const { return OS.size(); }
+
 //===----------------------------------------------------------------------===//
 //  raw_svector_ostream
 //===----------------------------------------------------------------------===//

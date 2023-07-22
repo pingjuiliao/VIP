@@ -416,6 +416,7 @@ void initializeUnpackMachineBundlesPass(PassRegistry&);
 void initializeUnreachableBlockElimLegacyPassPass(PassRegistry&);
 void initializeUnreachableMachineBlockElimPass(PassRegistry&);
 void initializeVerifierLegacyPassPass(PassRegistry&);
+void initializeVIPLegacyPassPass(PassRegistry&);
 void initializeVirtRegMapPass(PassRegistry&);
 void initializeVirtRegRewriterPass(PassRegistry&);
 void initializeWarnMissedTransformationsLegacyPass(PassRegistry &);

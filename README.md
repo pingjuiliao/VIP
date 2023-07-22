@@ -1,8 +1,8 @@
 # Value Invariant Property
 The repo ensures the value invariant properties via Information hiding
 
-## Disclaimer: this is not hyperspace
-This repo is not the same as [HyperSpace][1].  
+## Disclaimer: this is not [hyperspace][1]
+This implementation is not the same as [HyperSpace][1].  
 Specifically, this repo made the following changes.  
 
 - This repo only implements Code Pointer Seperation (CPS), which allows sophistitcated attacks for unchecked pointers.
@@ -14,6 +14,7 @@ we uses two level-table lookup.
 
 
 ## references
-[HyperSpace](https://dl.acm.org/doi/pdf/10.1145/3460120.3485376)
+[VIP: Safeguard Value Invariant Property for Thwarting Critical Memory Corruption Attacks](https://dl.acm.org/doi/pdf/10.1145/3460120.3485376)
+
 
 [1]: <https://dl.acm.org/doi/pdf/10.1145/3460120.3485376> "HyperSpace"
