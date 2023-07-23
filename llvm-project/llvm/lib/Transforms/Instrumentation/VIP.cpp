@@ -93,7 +93,7 @@ bool VIPGuard::instrumentFunctionPtrStore(StoreInst* SI) {
   if (!ValPtrTy || !ValPtrTy->getElementType()->isFunctionTy()) {
     return false;
   }
-  errs() << *SI << " will be instrumented\n"; 
+  // errs() << *SI << " will be instrumented\n"; 
   IRBuilder<> IRB(SI->getNextNode());
   IRB.CreateCall(vipWrite64Callee, {SI->getPointerOperand()});
   return true;
@@ -103,5 +103,15 @@ bool VIPGuard::instrumentIndirectCallSite(CallInst* CI) {
   if (!CI->isIndirectCall()) {
     return false;
   }
-  return false;
+  IRBuilder<> IRB(CI);
+  Value* Callee = CI->getCalledValue();
+  Value* PtrToCallee = NULL;
+  if (LoadInst* LI = dyn_cast<LoadInst>(Callee)) {
+    PtrToCallee = LI->getPointerOperand();
+  } else {
+    // unexpected type
+    return false;
+  }
+  IRB.CreateCall(vipAssertCallee, {PtrToCallee});
+  return true;
 }

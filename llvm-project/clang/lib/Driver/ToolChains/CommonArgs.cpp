@@ -659,6 +659,8 @@ collectSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
   }
   if (SanArgs.needsDfsanRt() && SanArgs.linkRuntimes())
     StaticRuntimes.push_back("dfsan");
+  if (SanArgs.needsVipRt() && SanArgs.linkRuntimes())
+    StaticRuntimes.push_back("vip");
   if (SanArgs.needsLsanRt() && SanArgs.linkRuntimes())
     StaticRuntimes.push_back("lsan");
   if (SanArgs.needsMsanRt() && SanArgs.linkRuntimes()) {
