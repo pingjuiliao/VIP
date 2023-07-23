@@ -84,8 +84,6 @@ void vip_write64(void** ptr) {
 void vip_assert(void** ptr) {
   void** safe_copy;
 #ifndef VIP_NO_VERBOSE
-  puts("abcd");
-  fprintf(stderr, VIP_ASSERT "hello\n");
   fprintf(stderr, VIP_ASSERT "safe[%p] == %p ??\n", ptr, *ptr);
 #endif
   asm volatile(
