@@ -6,6 +6,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Pass.h"
@@ -23,6 +24,9 @@ class VIPGuard {
   void prepareVIPLibraryCallee(Module&);
   bool instrumentFunctionPtrStore(StoreInst*);
   bool instrumentIndirectCallSite(CallInst*);
+  // some helper function
+  bool isVirtualFunctionCall(CallInst*);
+  MDNode* vipSignature;
   FunctionCallee vipWrite64Callee;
   FunctionCallee vipAssertCallee;
 };
@@ -72,6 +76,7 @@ void VIPGuard::prepareVIPLibraryCallee(Module &M) {
                                            false);
   vipWrite64Callee = M.getOrInsertFunction("vip_write64", FuncTy);
   vipAssertCallee = M.getOrInsertFunction("vip_assert", FuncTy);
+  vipSignature = MDNode::get(Ctx, MDString::get(Ctx, "vip_signature"));
 }
 
 
@@ -95,12 +100,16 @@ bool VIPGuard::instrumentFunctionPtrStore(StoreInst* SI) {
   }
   // errs() << *SI << " will be instrumented\n"; 
   IRBuilder<> IRB(SI->getNextNode());
-  IRB.CreateCall(vipWrite64Callee, {SI->getPointerOperand()});
+  CallInst* CI = IRB.CreateCall(vipWrite64Callee, {SI->getPointerOperand()});
+  CI->setMetadata("vip_signature", vipSignature);
   return true;
 }
 
 bool VIPGuard::instrumentIndirectCallSite(CallInst* CI) {
   if (!CI->isIndirectCall()) {
+    return false;
+  }
+  if (isVirtualFunctionCall(CI)) {
     return false;
   }
   IRBuilder<> IRB(CI);
@@ -114,4 +123,16 @@ bool VIPGuard::instrumentIndirectCallSite(CallInst* CI) {
   }
   IRB.CreateCall(vipAssertCallee, {PtrToCallee});
   return true;
+}
+
+
+bool VIPGuard::isVirtualFunctionCall(CallInst* CI) {
+  if (!CI->isIndirectCall()) {
+    return false;
+  }
+  Value* callee = CI->getCalledOperand();
+  if (LoadInst* LI = dyn_cast<LoadInst>(callee)) {
+    return LI->hasMetadata("vfptr_flag");
+  }
+  return false;
 }

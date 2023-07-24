@@ -1804,6 +1804,17 @@ CGCallee ItaniumCXXABI::getVirtualFunctionPointer(CodeGenFunction &CGF,
         MethodDecl->getParent(), VTable,
         VTableIndex * CGM.getContext().getTargetInfo().getPointerWidth(0) / 8);
   } else {
+    if (CGF.SanOpts.has(SanitizerKind::VIP)) {
+      llvm::Type* Args[1] = {CGM.Int8PtrTy};
+      llvm::FunctionType* VIPAssertFnTy = llvm::FunctionType::get(
+          CGM.Int32Ty, Args, false);
+      llvm::FunctionCallee VIPAssertFunc = CGM.CreateRuntimeFunction(
+          VIPAssertFnTy, "vip_assert");
+      Address VTableField = CGF.Builder.CreateElementBitCast(This, Ty);
+      llvm::Value* VTableFieldPtr = VTableField.getPointer();
+      CGF.Builder.CreateCall(VIPAssertFunc, {VTableFieldPtr});
+    }
+
     CGF.EmitTypeMetadataCodeForVCall(MethodDecl->getParent(), VTable, Loc);
 
     llvm::Value *VFuncPtr =
@@ -1811,6 +1822,8 @@ CGCallee ItaniumCXXABI::getVirtualFunctionPointer(CodeGenFunction &CGF,
     auto *VFuncLoad =
         CGF.Builder.CreateAlignedLoad(VFuncPtr, CGF.getPointerAlign());
 
+    llvm::MDNode *VFuncPtrFlag = llvm::MDNode::get(CGM.getLLVMContext(), llvm::MDString::get(CGM.getLLVMContext(), "vfptr_flag"));
+    VFuncLoad->setMetadata("vfptr_flag", VFuncPtrFlag);
     // Add !invariant.load md to virtual function load to indicate that
     // function didn't change inside vtable.
     // It's safe to add it without -fstrict-vtable-pointers, but it would not

@@ -16,6 +16,6 @@ all: libCPI $(testcases)
 %.exe: %.c
 	$(CC) $(VIPFLAGS) -o $@ $<
 %.ll: %.c
-	$(CC) $(CFLAGS) -S -emit-llvm -o $@ $<
+	$(CC) $(VIPFLAGS) -S -emit-llvm -o $@ $<
 clean:
 	rm $(wildcard *.exe) $(wildcard *.ll) $(wildcard *.bc) $(wildcard *.so)

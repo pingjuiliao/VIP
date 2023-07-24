@@ -3,3 +3,4 @@
 **/*.exe
 **/*.ll
 **/*.bc
+**/.gdb_history

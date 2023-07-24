@@ -83,18 +83,31 @@ void vip_write64(void** ptr) {
 
 void vip_assert(void** ptr) {
   void** safe_copy;
+  void* entry;
 #ifndef VIP_NO_VERBOSE
   fprintf(stderr, VIP_ASSERT "safe[%p] == %p ??\n", ptr, *ptr);
 #endif
   asm volatile(
-    "movq %[ptr], %%r10;"
-    "shrq $26, %%r10;"
-    "movq %%gs:(, %%r10, 8), %%r10;"
+    "movq %[ptr], %[entry];"
+    "shrq $26, %[entry];"
+    "movq %%gs:(, %[entry], 8), %[entry];"
+    : [entry] "=r"(entry)
+    : [ptr] "r"(ptr)
+  );
+
+  if (!entry) {
+    fprintf(stderr, VIP_VIOLATION "check failed on %p\n", ptr);
+    fprintf(stderr, " No vip superpage entry found\n");
+    exit(-1);
+  }
+
+  asm volatile(
     "movq %[ptr], %%r11;"
     "andq $0x3fffff8, %%r11;"
-    "movq (%%r10, %%r11), %[safe_copy];"
+    "movq (%[entry], %%r11), %[safe_copy];"
     : [safe_copy]"=r"(safe_copy)
-    : [ptr] "r"(ptr) 
+    : [ptr] "r"(ptr),
+      [entry] "r"(entry) 
   );
 
   if (safe_copy != *ptr) {
@@ -103,6 +116,8 @@ void vip_assert(void** ptr) {
     fprintf(stderr, " vuln pointer (now): %p\n", *ptr);
     exit(-1);
   }
+  printf("%p\n", safe_copy);
+  entry = NULL;
 }
 
 

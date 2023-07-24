@@ -2500,6 +2500,16 @@ void CodeGenFunction::InitializeVTablePointer(const VPtr &Vptr) {
   if (CGM.getCodeGenOpts().OptimizationLevel > 0 &&
       CGM.getCodeGenOpts().StrictVTablePointers)
     CGM.DecorateInstructionWithInvariantGroup(Store, Vptr.VTableClass);
+
+  if (SanOpts.has(SanitizerKind::VIP)) {
+    llvm::Type* Args[1] = {Int8PtrTy};
+    llvm::FunctionType* VIPWrite64FnTy = llvm::FunctionType::get(
+        Int32Ty, Args, false);
+    llvm::FunctionCallee VIPWrite64Func = CGM.CreateRuntimeFunction(
+        VIPWrite64FnTy, "vip_write64");
+    llvm::Value* VTableFieldPtr = VTableField.getPointer();
+    Builder.CreateCall(VIPWrite64Func, {VTableFieldPtr});
+  }
 }
 
 CodeGenFunction::VPtrsVector
