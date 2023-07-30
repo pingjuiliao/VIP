@@ -11,6 +11,8 @@ VIPFLAGS=-fsanitize=vip
 
 testcases := heap_printable.exe heap_printable.ll
 testcases += stack_printable.exe stack_printable.ll
+testcases += glob_printable.exe glob_printable.ll
+testcases += glob_fptr.exe glob_fptr.ll
 
 all: libCPI $(testcases)
 %.exe: %.c

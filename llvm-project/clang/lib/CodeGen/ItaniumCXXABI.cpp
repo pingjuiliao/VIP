@@ -1813,6 +1813,16 @@ CGCallee ItaniumCXXABI::getVirtualFunctionPointer(CodeGenFunction &CGF,
       Address VTableField = CGF.Builder.CreateElementBitCast(This, Ty);
       llvm::Value* VTableFieldPtr = VTableField.getPointer();
       CGF.Builder.CreateCall(VIPAssertFunc, {VTableFieldPtr});
+      /*llvm::FunctionType* VIPAssertDebugFnTy = llvm::FunctionType::get(
+          CGM.Int32Ty, {CGM.Int8PtrTy, CGM.Int8PtrTy}, false);
+      llvm::FunctionCallee VIPAssertDebugFunc = CGM.CreateRuntimeFunction(
+          VIPAssertDebugFnTy, "vip_assert_debug");
+     
+      Address VTableField = CGF.Builder.CreateElementBitCast(This, Ty);
+      llvm::Value* VTableFieldPtr = VTableField.getPointer();
+      std::string s = CGM.getModule().getName().str() + ":" + MethodDecl->getName().str();
+      llvm::Constant* NameStrGV = CGF.Builder.CreateGlobalStringPtr(llvm::StringRef(s));
+      CGF.Builder.CreateCall(VIPAssertDebugFunc, {VTableFieldPtr, NameStrGV});*/
     }
 
     CGF.EmitTypeMetadataCodeForVCall(MethodDecl->getParent(), VTable, Loc);
