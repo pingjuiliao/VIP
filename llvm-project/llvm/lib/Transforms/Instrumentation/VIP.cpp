@@ -30,12 +30,28 @@ class VIPGuard {
   bool instrumentIndirectCallSite(CallInst*);
   bool instrumentIndirectCallSiteWithDebug(CallInst*);
   bool instrumentInitializedGlobals(Module&);
-  
 
+  enum GEPType {
+    geptype_error=0,
+    geptype_struct,
+    geptype_array,
+    NUM_GEPTYPE
+  };
+  struct GEPEncode {
+    GEPEncode(): type_enc(geptype_error), index0(-1), index1(-1) {}
+    GEPType type_enc;
+    int index0; 
+    int index1;
+  };
   // some helper function
-  bool generateCtorsForInitializedGlobals(GlobalVariable*, Type*, unsigned=0);
+  void traverseSensitiveGlobals(GlobalVariable*, 
+                                SmallVector<GEPEncode*, 16>,
+                                Type*);
+  void generateCtorsForSensitiveGlobals(GlobalVariable*, 
+                                        SmallVector<GEPEncode*, 16>);
   bool isFunctionPointerType(Type*);
   bool isVirtualFunctionCall(CallInst*);
+  std::string createCtorName(Value*, Module*, SmallVector<GEPEncode*, 16>);
   MDNode* vipSignature;
   FunctionCallee vipWrite64Callee;
   FunctionCallee vipPendingWrite64Callee;
@@ -111,8 +127,8 @@ bool VIPGuard::sanitizeFunction(Function &F) {
     if (StoreInst *SI = dyn_cast<StoreInst>(&I)) {
       Res |= instrumentFunctionPtrStore(SI);
     } else if (CallInst *CI = dyn_cast<CallInst>(&I)) {
-      // Res |= instrumentIndirectCallSite(CI);
-      Res |= instrumentIndirectCallSiteWithDebug(CI);
+      Res |= instrumentIndirectCallSite(CI);
+      // Res |= instrumentIndirectCallSiteWithDebug(CI);
     }
   }
   return Res;
@@ -123,9 +139,7 @@ bool VIPGuard::instrumentFunctionPtrStore(StoreInst* SI) {
   if (!isFunctionPointerType(ValTy)) {
     return false;
   }
-  // errs() << *SI << " will be instrumented\n"; 
   IRBuilder<> IRB(SI->getNextNode());
-  // errs() << "write64 correct arg:" << *SI->getPointerOperand() << "\n";
   CallInst* CI = IRB.CreateCall(vipWrite64Callee, {SI->getPointerOperand()});
   CI->setMetadata("vip_signature", vipSignature);
   return true;
@@ -167,7 +181,6 @@ bool VIPGuard::instrumentIndirectCallSiteWithDebug(CallInst* CI) {
   } else {
     return false;
   }
-  // errs() << *CI << " is instrumented!\n";
   std::string SrcFile = CI->getModule()->getSourceFileName();
   std::string s = SrcFile + ":" + F->getName().str();
   StringRef CallerStr = StringRef(s);
@@ -177,93 +190,118 @@ bool VIPGuard::instrumentIndirectCallSiteWithDebug(CallInst* CI) {
 }
 
 bool VIPGuard::instrumentInitializedGlobals(Module &M) {
-  /*LLVMContext &Ctx = M.getContext();
-  FunctionType* FTy = FunctionType::get(Type::getVoidTy(Ctx),
-                                        {Type::getVoidTy(Ctx)}, false);
-  Function* HelloFunc = Function::Create(FTy, GlobalValue::ExternalLinkage,
-                                         "vip_hello", M);
-  IRBuilder<> IRB(BasicBlock::Create(Ctx, "", HelloFunc));
-  FunctionType* PutsFTy = FunctionType::get(IRB.getInt32Ty(), 
-                                            {IRB.getInt8PtrTy()}, false);
-  FunctionCallee PutsFunc = M.getOrInsertFunction("puts", PutsFTy);
-  Constant* HelloStrGV = IRB.CreateGlobalStringPtr("[VIP says HELLO]");
-  IRB.CreateCall(PutsFunc, {HelloStrGV});
-  appendToGlobalCtors(M, HelloFunc, 0);
-  IRB.CreateRetVoid();*/
-  
+  SmallVector<GEPEncode*, 16> GEPEncStack;
 
-
-  // HelloFunc->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
-  SmallVector<GlobalVariable*, 32> GlobalsToProtect;
   for (GlobalVariable &GV: M.globals()) {
-    Type* GVTy = GV.getType();    
+    Type* GVTy = GV.getType();
+    if (GV.getName().startswith("llvm")) {
+      continue;
+    }
     PointerType *GVPtrTy = dyn_cast<PointerType>(GVTy);
     if (!GVPtrTy) {
       continue;
     }
     Type* GVElementTy = GVPtrTy->getElementType();
-    if (isFunctionPointerType(GVElementTy)) {
-      generateCtorsForInitializedGlobals(&GV, GVElementTy);
-    } else if (GVElementTy->isStructTy()) {
-      for (unsigned i = 0; i < GVElementTy->getStructNumElements(); ++i) {
-        if (isFunctionPointerType(GVElementTy->getStructElementType(i))) {
-          generateCtorsForInitializedGlobals(&GV, GVElementTy, i);
-        }
-      }
-    } else {
-      // others
-    }
+    GEPEncStack.clear();
+    errs() << "checking GV " << GV.getName() << "\n";
+    traverseSensitiveGlobals(&GV, GEPEncStack, GVElementTy);
   }
 
   return true;
 }
 
-bool VIPGuard::generateCtorsForInitializedGlobals(GlobalVariable *GV,
-                                                  Type* ElementTy,
-                                                  unsigned index) {
+void VIPGuard::traverseSensitiveGlobals(GlobalVariable *GV,       
+                                        SmallVector<GEPEncode*, 16> EncStack, 
+                                        Type* CurrType) {
+  if (isFunctionPointerType(CurrType)) {
+    generateCtorsForSensitiveGlobals(GV, EncStack);
+  } else if (CurrType->isStructTy()) {
+    GEPEncode* encoded = new GEPEncode();
+    encoded->type_enc = geptype_struct;
+    // some helper function
+    for (unsigned i = 0; i < CurrType->getStructNumElements(); ++i) {
+      encoded->index0 = i;
+      EncStack.push_back(encoded);
+      traverseSensitiveGlobals(GV, 
+                               EncStack, 
+                               CurrType->getStructElementType(i));
+      EncStack.pop_back();
+    }
+    delete encoded;
+  } else if (CurrType->isArrayTy()) {
+    GEPEncode* encoded = new GEPEncode();
+    encoded->type_enc = geptype_array;
+    for (uint64_t i = 0; i < CurrType->getArrayNumElements(); ++i) {
+      encoded->index0 = i;
+      EncStack.push_back(encoded);
+      traverseSensitiveGlobals(GV, EncStack,
+                               CurrType->getArrayElementType());  
+      EncStack.pop_back();
+    } 
+    delete encoded; 
+  }
+}
+
+void VIPGuard::generateCtorsForSensitiveGlobals(
+    GlobalVariable* GV,
+    SmallVector<GEPEncode*, 16> EncStack) {
   Module* M = GV->getParent();
   LLVMContext &Ctx = M->getContext();
-  
-  FunctionType* NewCtorFTy = FunctionType::get(Type::getVoidTy(Ctx),
-                                              {Type::getVoidTy(Ctx)},
-                                              false);
-  std::string NewCtorName = "vip_init_gv_";
-  if (GV->hasName()) {
-    NewCtorName += M->getName().str() + GV->getName().str() + std::to_string(index);
-  } else {
-    NewCtorName += M->getName().str() + std::to_string(linear_id());
-  }
-  Function* NewCtorFunc = Function::Create(NewCtorFTy, 
+
+  FunctionType* NewCtorFuncTy = FunctionType::get(Type::getVoidTy(Ctx),
+                                                  {Type::getVoidTy(Ctx)},
+                                                  false);
+  std::string NewCtorName = createCtorName(GV, M, EncStack);
+  Function* NewCtorFunc = Function::Create(NewCtorFuncTy, 
                                            GlobalValue::ExternalLinkage,
-                                            NewCtorName, *M);
-  IRBuilder<> IRB(BasicBlock::Create(Ctx, "", NewCtorFunc));  
-  // Value* GVElement = IRB.CreateGEP(GV->getType(), GV);
-  Value* Ptr = nullptr;
-    // errs() << *(GV->getType()) << "is GV type\n";
-  if (isFunctionPointerType(ElementTy)) {
-    Ptr = GV;
-  } else if (ElementTy->isStructTy()) {
-    Ptr = IRB.CreateStructGEP(ElementTy, GV, index);
-    // Ptr = IRB.CreateInBoundsGEP(ElementTy, GV, IRB.getInt32(index));
-  } else {
-    errs() << *GV << " not instrumented\n";
-    return false;
+                                           NewCtorName, *M);
+
+  // debug
+  /*errs() << "[ ";
+  for (auto gepEncoded: EncStack) {
+    errs() << "(" << gepEncoded->type_enc << ", " << gepEncoded->index0 
+           << "), ";
   }
-  // errs() << "Ptr: " << *Ptr << "\n";
+  errs() << "]\n";*/
+
+  // building constructor body
+  IRBuilder<> IRB(BasicBlock::Create(Ctx, "", NewCtorFunc));
+  PointerType* GVPtrTy = dyn_cast<PointerType>(GV->getType());
+  Type* ElemTy = GVPtrTy->getElementType();
+  Value* Ptr = GV;
+  for (auto gepEncoded: EncStack) {
+    switch (gepEncoded->type_enc) {
+      case geptype_struct: {
+        Ptr = IRB.CreateStructGEP(ElemTy, Ptr, gepEncoded->index0);
+        ElemTy = ElemTy->getStructElementType(gepEncoded->index0); 
+        break;
+      }
+      case geptype_array: {
+        SmallVector<Value*, 4> Args;
+        Args.push_back(IRB.getInt64(0));
+        Args.push_back(IRB.getInt64(gepEncoded->index0));
+        if (gepEncoded->index1 >= 0) {
+          Args.push_back(IRB.getInt64(gepEncoded->index1));
+        }
+        Ptr = IRB.CreateInBoundsGEP(ElemTy, Ptr, Args);
+        ElemTy = ElemTy->getArrayElementType();
+        break;
+      }
+      default: {
+        break;  
+      }
+    }
+  }
   IRB.CreateCall(vipPendingWrite64Callee, {Ptr});
   IRB.CreateRetVoid();
   appendToGlobalCtors(*M, NewCtorFunc, 0);
   errs() << NewCtorName << " has been created\n";
-  return true;
 }
-
-
 
 bool VIPGuard::isFunctionPointerType(Type* Ty) {
   PointerType* PtrTy = dyn_cast<PointerType>(Ty);
   return PtrTy && PtrTy->getElementType()->isFunctionTy();
 }
-
 
 bool VIPGuard::isVirtualFunctionCall(CallInst* CI) {
   if (!CI->isIndirectCall()) {
@@ -276,4 +314,23 @@ bool VIPGuard::isVirtualFunctionCall(CallInst* CI) {
   return false;
 }
 
-
+std::string VIPGuard::createCtorName(Value* Val, Module* M,
+                                     SmallVector<GEPEncode*, 16> EncStack) {
+  std::string FullName = "vip_init_gv_";
+  std::string ModuleName = M->getName().str();
+  std::string ValName;
+  if (Val->hasName()) {
+    ValName = Val->getName().str();
+  } else {
+    ValName = "valueid" + std::to_string(linear_id());
+  }
+  FullName += ModuleName + "_" + ValName;
+  // FullName.replace(FullName.begin(), FullName.end(), ".", "_");
+  for (auto Encoded: EncStack) {
+    FullName += "_" + std::to_string(Encoded->index0);
+    if (Encoded->index1 >= 0) {
+      FullName += "-" + std::to_string(Encoded->index1);  
+    }
+  }
+  return FullName;
+}

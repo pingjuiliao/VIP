@@ -7,17 +7,17 @@ CFLAGS=-m64
 CXXFLAGS=$(CFLAGS)
 VIPFLAGS=-fsanitize=vip
 
-.PHONY: all clean libCPI
+.PHONY: all clean .FORCE
 
-testcases := heap_printable.exe heap_printable.ll
-testcases += stack_printable.exe stack_printable.ll
-testcases += glob_printable.exe glob_printable.ll
-testcases += glob_fptr.exe glob_fptr.ll
+testcases := raw_fptr.exe raw_fptr.ll
+testcases += struct.exe struct.ll
+testcases += 1darray.exe 1darray.ll
 
-all: libCPI $(testcases)
-%.exe: %.c
+
+all: $(testcases)
+%.exe: %.c .FORCE
 	$(CC) $(VIPFLAGS) -o $@ $<
-%.ll: %.c
+%.ll: %.c .FORCE
 	$(CC) $(VIPFLAGS) -S -emit-llvm -o $@ $<
 clean:
 	rm $(wildcard *.exe) $(wildcard *.ll) $(wildcard *.bc) $(wildcard *.so)

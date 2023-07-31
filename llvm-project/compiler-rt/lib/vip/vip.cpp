@@ -163,7 +163,11 @@ void vip_assert_debug(void** ptr, char* caller) {
   if (!entry) {
     fprintf(stderr, VIP_VIOLATION "check failed on %p\n", ptr);
     fprintf(stderr, " No vip superpage entry found\n");
-    exit(-1);
+    FILE* fp = fopen("/proc/self/maps", "rb");
+    memset(buffer, 0, sizeof(buffer));
+    while (fgets(buffer, sizeof(buffer), fp)) {
+      fputs(buffer, stderr);
+    }
   }
 
   asm volatile(

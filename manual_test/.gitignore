@@ -4,3 +4,4 @@
 **/*.ll
 **/*.bc
 **/.gdb_history
+**/tmp
