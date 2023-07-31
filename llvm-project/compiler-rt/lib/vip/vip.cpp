@@ -96,6 +96,7 @@ void vip_write64(void** ptr) {
     : [ptr] "r"(ptr),
       [entry] "r"(entry),
       [bot_offset] "r"(bot_offset)
+    : "r10"
   );
 
   entry = NULL;
@@ -128,6 +129,7 @@ void vip_assert(void** ptr) {
     : [safe_copy]"=r"(safe_copy)
     : [ptr] "r"(ptr),
       [entry] "r"(entry) 
+    : "r11"
   );
 
   if (safe_copy != *ptr) {
@@ -176,7 +178,8 @@ void vip_assert_debug(void** ptr, char* caller) {
     "movq (%[entry], %%r11), %[safe_copy];"
     : [safe_copy]"=r"(safe_copy)
     : [ptr] "r"(ptr),
-      [entry] "r"(entry) 
+      [entry] "r"(entry)
+    : "r11"
   );
 
   if (safe_copy != *ptr) {

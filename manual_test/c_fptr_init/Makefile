@@ -12,6 +12,7 @@ VIPFLAGS=-fsanitize=vip
 testcases := raw_fptr.exe raw_fptr.ll
 testcases += struct.exe struct.ll
 testcases += 1darray.exe 1darray.ll
+testcases += 2darray.exe 2darray.ll
 
 
 all: $(testcases)

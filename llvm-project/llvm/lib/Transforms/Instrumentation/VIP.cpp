@@ -38,10 +38,10 @@ class VIPGuard {
     NUM_GEPTYPE
   };
   struct GEPEncode {
-    GEPEncode(): type_enc(geptype_error), index0(-1), index1(-1) {}
+    GEPEncode(): type_enc(geptype_error), index0(-1) {}
     GEPType type_enc;
     int index0; 
-    int index1;
+    // int index1; // no need for index1
   };
   // some helper function
   void traverseSensitiveGlobals(GlobalVariable*, 
@@ -280,9 +280,6 @@ void VIPGuard::generateCtorsForSensitiveGlobals(
         SmallVector<Value*, 4> Args;
         Args.push_back(IRB.getInt64(0));
         Args.push_back(IRB.getInt64(gepEncoded->index0));
-        if (gepEncoded->index1 >= 0) {
-          Args.push_back(IRB.getInt64(gepEncoded->index1));
-        }
         Ptr = IRB.CreateInBoundsGEP(ElemTy, Ptr, Args);
         ElemTy = ElemTy->getArrayElementType();
         break;
@@ -328,9 +325,6 @@ std::string VIPGuard::createCtorName(Value* Val, Module* M,
   // FullName.replace(FullName.begin(), FullName.end(), ".", "_");
   for (auto Encoded: EncStack) {
     FullName += "_" + std::to_string(Encoded->index0);
-    if (Encoded->index1 >= 0) {
-      FullName += "-" + std::to_string(Encoded->index1);  
-    }
   }
   return FullName;
 }
