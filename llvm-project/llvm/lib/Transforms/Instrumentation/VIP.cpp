@@ -203,7 +203,6 @@ bool VIPGuard::instrumentInitializedGlobals(Module &M) {
     }
     Type* GVElementTy = GVPtrTy->getElementType();
     GEPEncStack.clear();
-    errs() << "checking GV " << GV.getName() << "\n";
     traverseSensitiveGlobals(&GV, GEPEncStack, GVElementTy);
   }
 
@@ -255,15 +254,6 @@ void VIPGuard::generateCtorsForSensitiveGlobals(
   Function* NewCtorFunc = Function::Create(NewCtorFuncTy, 
                                            GlobalValue::ExternalLinkage,
                                            NewCtorName, *M);
-
-  // debug
-  /*errs() << "[ ";
-  for (auto gepEncoded: EncStack) {
-    errs() << "(" << gepEncoded->type_enc << ", " << gepEncoded->index0 
-           << "), ";
-  }
-  errs() << "]\n";*/
-
   // building constructor body
   IRBuilder<> IRB(BasicBlock::Create(Ctx, "", NewCtorFunc));
   PointerType* GVPtrTy = dyn_cast<PointerType>(GV->getType());
@@ -292,7 +282,7 @@ void VIPGuard::generateCtorsForSensitiveGlobals(
   IRB.CreateCall(vipPendingWrite64Callee, {Ptr});
   IRB.CreateRetVoid();
   appendToGlobalCtors(*M, NewCtorFunc, 0);
-  errs() << NewCtorName << " has been created\n";
+  // errs() << NewCtorName << " has been created\n";
 }
 
 bool VIPGuard::isFunctionPointerType(Type* Ty) {
